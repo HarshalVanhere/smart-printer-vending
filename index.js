@@ -6,74 +6,100 @@ const app = express();
 
 console.log('Starting server setup...');
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// Production security
+if (process.env.NODE_ENV === 'production') {
+  app.set('trust proxy', 1);
+}
+
+// CORS configuration for production
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production' 
+    ? ['https://smart-printer-vending.vercel.app', 'https://smart-printer-vending-git-main.vercel.app']
+    : ['http://localhost:3000', 'http://localhost:3001'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
+
+// Body parsing middleware with limits
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// Security headers
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  next();
+});
 
 // Static file serving for uploads
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+const uploadsPath = path.join(__dirname, 'uploads');
+app.use('/uploads', express.static(uploadsPath, {
+  maxAge: '1h',
+  setHeaders: (res, filePath) => {
+    if (!filePath.endsWith('.pdf')) {
+      res.status(403).send('Forbidden');
+      return;
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+  }
+}));
 
 console.log('Basic middleware loaded...');
 
 // Health check
 app.get('/', (req, res) => res.json({ 
   message: 'Smart Printer Backend Running',
-  timestamp: new Date().toISOString()
+  timestamp: new Date().toISOString(),
+  version: '1.0.0',
+  environment: process.env.NODE_ENV || 'development'
 }));
 
-console.log('Health check route added...');
+// API routes
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/upload', require('./routes/upload'));
+app.use('/api/wallet', require('./routes/wallet'));
+app.use('/api/print', require('./routes/print'));
+app.use('/api/admin', require('./routes/admin'));
 
-// Add routes one by one and see which one breaks
-try {
-  console.log('Loading auth routes...');
-  app.use('/api/auth', require('./routes/auth'));
-  console.log('✅ Auth routes loaded in Express');
-} catch (error) {
-  console.error('❌ Error loading auth routes in Express:', error.message);
-  process.exit(1);
+// Serve frontend in production
+if (process.env.NODE_ENV === 'production') {
+  const frontendPath = path.join(__dirname, 'web-frontend', 'build');
+  app.use(express.static(frontendPath));
+  
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendPath, 'index.html'));
+  });
 }
 
-try {
-  console.log('Loading upload routes...');
-  app.use('/api/upload', require('./routes/upload'));
-  console.log('✅ Upload routes loaded in Express');
-} catch (error) {
-  console.error('❌ Error loading upload routes in Express:', error.message);
-  process.exit(1);
-}
+// Global error handler
+app.use((error, req, res, next) => {
+  console.error('Global error:', error);
+  
+  if (error.type === 'entity.too.large') {
+    return res.status(413).json({ error: 'Request too large' });
+  }
+  
+  res.status(500).json({ 
+    error: process.env.NODE_ENV === 'production' 
+      ? 'Internal server error' 
+      : error.message,
+    requestId: Date.now().toString()
+  });
+});
 
-try {
-  console.log('Loading wallet routes...');
-  app.use('/api/wallet', require('./routes/wallet'));
-  console.log('✅ Wallet routes loaded in Express');
-} catch (error) {
-  console.error('❌ Error loading wallet routes in Express:', error.message);
-  process.exit(1);
-}
-
-try {
-  console.log('Loading print routes...');
-  app.use('/api/print', require('./routes/print'));
-  console.log('✅ Print routes loaded in Express');
-} catch (error) {
-  console.error('❌ Error loading print routes in Express:', error.message);
-  process.exit(1);
-}
-
-try {
-  console.log('Loading admin routes...');
-  app.use('/api/admin', require('./routes/admin'));
-  console.log('✅ Admin routes loaded in Express');
-} catch (error) {
-  console.error('❌ Error loading admin routes in Express:', error.message);
-  process.exit(1);
-}
-
-console.log('All routes loaded successfully, starting server...');
+// 404 handler
+app.use('*', (req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+});
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);
-  console.log('Server started successfully!');
+  console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`JWT Secret configured: ${!!process.env.JWT_SECRET}`);
 });
