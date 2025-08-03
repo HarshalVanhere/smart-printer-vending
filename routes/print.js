@@ -28,13 +28,13 @@ try {
   console.error('Failed to initialize MQTT client:', error);
 }
 
-const jobs = {}; // jobId: { status, fileId, printerId, email, createdAt }
+const jobs = {}; // jobId: { status, fileId, printerId, prn, createdAt }
 
-// POST /job { printerId, fileId } - email comes from JWT
+// POST /job { printerId, fileId } - prn comes from JWT
 router.post('/job', authenticateToken, (req, res) => {
   try {
     const { printerId, fileId } = req.body;
-    const email = req.user.email; // Get from authenticated user
+    const prn = req.user.prn; // Get from authenticated user
     
     if (!printerId || !fileId) {
       return res.status(400).json({ error: 'printerId and fileId are required' });
@@ -56,7 +56,7 @@ router.post('/job', authenticateToken, (req, res) => {
       status: 'pending', 
       fileId, 
       printerId, 
-      email,
+      prn,
       createdAt: new Date().toISOString()
     };
     
@@ -66,7 +66,7 @@ router.post('/job', authenticateToken, (req, res) => {
       const command = {
         job_id: jobId,
         file_url: fileUrl,
-        user_id: email,
+        user_prn: prn,
         timestamp: new Date().toISOString()
       };
       
@@ -100,7 +100,7 @@ router.get('/job/:jobId', authenticateToken, (req, res) => {
     }
     
     // Users can only see their own jobs
-    if (job.email !== req.user.email) {
+    if (job.prn !== req.user.prn) {
       return res.status(403).json({ error: 'Access denied' });
     }
     
@@ -120,7 +120,7 @@ router.get('/job/:jobId', authenticateToken, (req, res) => {
 router.get('/jobs', authenticateToken, (req, res) => {
   try {
     const userJobs = Object.entries(jobs)
-      .filter(([_, job]) => job.email === req.user.email)
+      .filter(([_, job]) => job.prn === req.user.prn)
       .map(([jobId, job]) => ({
         jobId,
         status: job.status,

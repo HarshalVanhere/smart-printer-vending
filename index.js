@@ -21,7 +21,11 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization']
 };
 
-app.use(cors(corsOptions));
+app.use(cors({
+  origin: 'http://localhost:3000', // or '*'
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true
+}));
 
 // Body parsing middleware with limits
 app.use(express.json({ limit: '10mb' }));

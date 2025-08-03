@@ -2,12 +2,12 @@ const express = require('express');
 const { authenticateToken } = require('./auth');
 const router = express.Router();
 
-// Mock admin users - in production, store in database
-const adminUsers = ['admin@example.com'];
+// Mock admin users - using PRNs instead of emails
+const adminPRNs = ['123456789']; // Add admin PRNs here
 
 // Admin authentication middleware
 const authenticateAdmin = (req, res, next) => {
-  if (!adminUsers.includes(req.user.email)) {
+  if (!adminPRNs.includes(req.user.prn)) {
     return res.status(403).json({ error: 'Admin access required' });
   }
   next();
@@ -40,7 +40,7 @@ router.get('/printers', authenticateToken, authenticateAdmin, (req, res) => {
   }
 });
 
-// POST /printer-status - Update printer status (changed route name)
+// POST /printer-status - Update printer status
 router.post('/printer-status', authenticateToken, authenticateAdmin, (req, res) => {
   try {
     const { printerId, status } = req.body;
@@ -84,11 +84,11 @@ router.get('/jobs', authenticateToken, authenticateAdmin, (req, res) => {
   }
 });
 
-// GET /users - Get all users
+// GET /users - Get all users (now shows PRNs)
 router.get('/users', authenticateToken, authenticateAdmin, (req, res) => {
   try {
-    const users = Object.entries(wallets).map(([email, balance]) => ({
-      email,
+    const users = Object.entries(wallets).map(([prn, balance]) => ({
+      prn,
       balance
     }));
     
@@ -99,21 +99,21 @@ router.get('/users', authenticateToken, authenticateAdmin, (req, res) => {
   }
 });
 
-// POST /wallet-adjust - Adjust user wallet (changed route name)
+// POST /wallet-adjust - Adjust user wallet (now uses PRN)
 router.post('/wallet-adjust', authenticateToken, authenticateAdmin, (req, res) => {
   try {
-    const { email, amount } = req.body;
+    const { prn, amount } = req.body;
     
-    if (!email || typeof amount !== 'number') {
-      return res.status(400).json({ error: 'Email and amount are required' });
+    if (!prn || typeof amount !== 'number') {
+      return res.status(400).json({ error: 'PRN and amount are required' });
     }
     
-    if (!wallets[email]) wallets[email] = 0;
-    wallets[email] += amount;
+    if (!wallets[prn]) wallets[prn] = 0;
+    wallets[prn] += amount;
     
     res.json({ 
       success: true, 
-      balance: wallets[email] 
+      balance: wallets[prn] 
     });
   } catch (error) {
     console.error('Error adjusting wallet:', error);
